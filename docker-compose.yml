@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  pdf-service:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./uploads:/app/uploads
+      - ./static:/app/static
+    container_name: pdf_processing_service
+    restart: unless-stopped 
