@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse, FileResponse
 import os
 import uuid
 import shutil
-from app.services.pdf_converter import convert_pdf_to_images
+from app.services.pdf_converter import convert_pdf_to_images, convert_pdf_to_stitched_image
 
 router = APIRouter()
 
@@ -127,4 +127,111 @@ async def get_image_file(filename: str):
         path=file_path,
         media_type="image/png",
         filename=filename
-    ) 
+    )
+
+
+@router.post("/process-pdf-stitched/")
+async def process_pdf_stitched_endpoint(
+    request: Request,
+    file: UploadFile = File(...),
+    dpi: int = Form(300)
+):
+    """
+    接收PDF文件和DPI值。
+    将PDF转换为图片，按照现有规则进行旋转，然后以最大宽度为基准将图片上下拼接成一张长图。
+    保留原分辨率。
+    """
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="文件类型无效。请上传PDF文件。")
+
+    # 创建唯一文件名避免冲突
+    unique_id = uuid.uuid4()
+    original_filename = os.path.splitext(file.filename)[0]
+    pdf_filename = f"{original_filename}_{unique_id}.pdf"
+    pdf_path = os.path.join(UPLOADS_DIR, pdf_filename)
+    
+    # 保存上传的文件
+    try:
+        with open(pdf_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        file.file.close()
+
+    try:
+        # 执行转换和拼接
+        stitched_image_path = convert_pdf_to_stitched_image(pdf_path, dpi, STATIC_DIR)
+        
+        if not stitched_image_path:
+            raise HTTPException(status_code=500, detail="PDF转换为拼接图片失败。")
+
+        # 生成公共URL
+        base_url = str(request.base_url)
+        image_filename = os.path.basename(stitched_image_path)
+        image_url = f"{base_url}{STATIC_DIR}/{image_filename}"
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "PDF处理成功，已生成拼接长图",
+                "stitched_image_url": image_url,
+                "filename": image_filename
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"处理过程中发生错误: {str(e)}")
+    
+    finally:
+        # 清理上传的PDF文件
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
+
+
+@router.post("/process-pdf-stitched-file/")
+async def process_pdf_stitched_file_endpoint(
+    request: Request,
+    file: UploadFile = File(...),
+    dpi: int = Form(300)
+):
+    """
+    接收PDF文件和DPI值。
+    将PDF转换为图片，按照现有规则进行旋转，然后以最大宽度为基准将图片上下拼接成一张长图。
+    直接返回拼接后的图片文件。
+    """
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="文件类型无效。请上传PDF文件。")
+
+    # 创建唯一文件名避免冲突
+    unique_id = uuid.uuid4()
+    original_filename = os.path.splitext(file.filename)[0]
+    pdf_filename = f"{original_filename}_{unique_id}.pdf"
+    pdf_path = os.path.join(UPLOADS_DIR, pdf_filename)
+    
+    # 保存上传的文件
+    try:
+        with open(pdf_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        file.file.close()
+
+    try:
+        # 执行转换和拼接
+        stitched_image_path = convert_pdf_to_stitched_image(pdf_path, dpi, STATIC_DIR)
+        
+        if not stitched_image_path or not os.path.exists(stitched_image_path):
+            raise HTTPException(status_code=500, detail="PDF转换为拼接图片失败。")
+
+        # 直接返回文件
+        return FileResponse(
+            path=stitched_image_path,
+            media_type="image/png",
+            filename=f"{original_filename}_stitched.png"
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"处理过程中发生错误: {str(e)}")
+    
+    finally:
+        # 清理上传的PDF文件
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path) 

@@ -150,6 +150,109 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/process-pdf-stitched/:
+    post:
+      tags:
+        - "PDF处理"
+      summary: "处理PDF文件并返回拼接长图URL"
+      description: "上传一个PDF文件和DPI值，将其转换为图片，按照现有规则进行旋转，然后以最大宽度为基准将图片上下拼接成一张长图，并返回图片URL。"
+      operationId: "processPdfStitched"
+      requestBody:
+        description: "需要上传的PDF文件和DPI设置"
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "要处理的PDF文件。"
+                dpi:
+                  type: integer
+                  format: int32
+                  description: "输出图像的DPI（每英寸点数）。"
+                  default: 300
+      responses:
+        '200':
+          description: "PDF处理成功，已生成拼接长图"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "PDF处理成功，已生成拼接长图"
+                  stitched_image_url:
+                    type: string
+                    format: url
+                    example: "http://localhost:8000/static/document_stitched.png"
+                  filename:
+                    type: string
+                    example: "document_stitched.png"
+        '400':
+          description: "无效的输入"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: "服务器内部错误"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/process-pdf-stitched-file/:
+    post:
+      tags:
+        - "PDF处理"
+      summary: "处理PDF文件并直接返回拼接长图文件"
+      description: "上传一个PDF文件和DPI值，将其转换为图片，按照现有规则进行旋转，然后以最大宽度为基准将图片上下拼接成一张长图，直接返回文件。"
+      operationId: "processPdfStitchedFile"
+      requestBody:
+        description: "需要上传的PDF文件和DPI设置"
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "要处理的PDF文件。"
+                dpi:
+                  type: integer
+                  format: int32
+                  description: "输出图像的DPI（每英寸点数）。"
+                  default: 300
+      responses:
+        '200':
+          description: "成功返回拼接后的长图文件"
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+                description: "PNG格式的拼接长图文件"
+        '400':
+          description: "无效的输入"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: "服务器内部错误"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Error:
