@@ -83,6 +83,7 @@ include/
 
 # Docker
 .dockerignore
+docker-compose.yml
 
 # User-specific files
 .DS_Store
