@@ -1,7 +1,7 @@
 openapi: "3.0.0"
 info:
   title: "AI Agent Support Service API"
-  description: "一个用于PDF处理的API，可以将PDF文件转换为图片。"
+  description: "一个用于PDF处理和版面解析的API服务。"
   version: "1.0.0"
 servers:
   - url: "http://localhost:8000"
@@ -253,6 +253,193 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/layout-parsing/:
+    post:
+      tags:
+        - "版面解析"
+      summary: "版面解析（JSON请求方式）"
+      description: "接收图像/PDF的URL或Base64编码内容，返回版面解析结果（Markdown格式）。"
+      operationId: "layoutParsing"
+      requestBody:
+        description: "版面解析请求参数"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LayoutParsingRequest'
+      responses:
+        '200':
+          description: "版面解析成功"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayoutParsingResponse'
+        '400':
+          description: "无效的输入"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: "服务器内部错误"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/layout-parsing/upload/:
+    post:
+      tags:
+        - "版面解析"
+      summary: "版面解析（文件上传方式）"
+      description: "上传图像或PDF文件，保存到服务器后通过URL调用版面解析API。注意：服务需要部署在远程API可访问的服务器上。"
+      operationId: "layoutParsingUpload"
+      requestBody:
+        description: "需要上传的文件和解析参数"
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "要解析的图像或PDF文件。支持的类型：PDF、JPEG、PNG、GIF、WebP、BMP、TIFF"
+                api_url:
+                  type: string
+                  description: "版面解析API服务地址（可选，默认从环境变量读取）"
+                visualize:
+                  type: boolean
+                  description: "是否返回可视化结果图"
+                  default: false
+                prettify_markdown:
+                  type: boolean
+                  description: "是否美化Markdown输出"
+                  default: true
+                use_layout_detection:
+                  type: boolean
+                  description: "是否使用版面检测"
+                use_chart_recognition:
+                  type: boolean
+                  description: "是否使用图表识别"
+                merge_layout_blocks:
+                  type: boolean
+                  description: "是否合并版面块"
+                keep_file:
+                  type: boolean
+                  description: "是否保留上传的文件（默认处理完后删除）"
+                  default: false
+      responses:
+        '200':
+          description: "版面解析成功"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "版面解析成功"
+                  log_id:
+                    type: string
+                    description: "请求UUID"
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  markdown_results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MarkdownResult'
+                  data_info:
+                    type: object
+                    description: "输入数据信息"
+                    properties:
+                      width:
+                        type: integer
+                        example: 2481
+                      height:
+                        type: integer
+                        example: 3508
+                      type:
+                        type: string
+                        example: "image"
+                  full_markdown:
+                    type: string
+                    description: "完整的Markdown文本"
+                  file_url:
+                    type: string
+                    format: url
+                    description: "上传文件的URL（仅当keep_file=true时返回）"
+        '400':
+          description: "无效的输入"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: "服务器内部错误"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/layout-parsing/markdown-only/:
+    post:
+      tags:
+        - "版面解析"
+      summary: "版面解析 - 仅返回Markdown"
+      description: "简化版接口，只返回提取的Markdown文本内容，不包含详细的结构信息。"
+      operationId: "layoutParsingMarkdownOnly"
+      requestBody:
+        description: "版面解析请求参数"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LayoutParsingRequest'
+      responses:
+        '200':
+          description: "版面解析成功"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  log_id:
+                    type: string
+                    description: "请求UUID"
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  full_markdown:
+                    type: string
+                    description: "完整的Markdown文本"
+                  page_markdowns:
+                    type: array
+                    description: "按页的Markdown内容"
+                    items:
+                      type: object
+                      properties:
+                        page_index:
+                          type: integer
+                          description: "页码索引"
+                          example: 0
+                        markdown:
+                          type: string
+                          description: "该页的Markdown内容"
+                  total_pages:
+                    type: integer
+                    description: "总页数"
+                    example: 1
+        '400':
+          description: "无效的输入"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: "服务器内部错误"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Error:
@@ -262,4 +449,79 @@ components:
       properties:
         detail:
           type: string
-          example: "错误详情" 
+          example: "错误详情"
+    LayoutParsingRequest:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+          description: "服务器可访问的图像文件或PDF文件的URL，或文件内容的Base64编码结果。默认对于超过10页的PDF文件，只有前10页会被处理。"
+          example: "http://example.com/document.png"
+        api_url:
+          type: string
+          description: "版面解析API服务地址（可选，默认从环境变量LAYOUT_PARSING_API_URL读取）"
+        file_type:
+          type: integer
+          description: "文件类型。0表示PDF文件，1表示图像文件。若不提供则根据URL自动推断文件类型。"
+          enum: [0, 1]
+        visualize:
+          type: boolean
+          description: "是否返回可视化结果图"
+          default: false
+        prettify_markdown:
+          type: boolean
+          description: "是否美化Markdown输出"
+          default: true
+        use_layout_detection:
+          type: boolean
+          description: "是否使用版面检测"
+        use_chart_recognition:
+          type: boolean
+          description: "是否使用图表识别"
+        merge_layout_blocks:
+          type: boolean
+          description: "是否合并版面块"
+    LayoutParsingResponse:
+      type: object
+      properties:
+        log_id:
+          type: string
+          description: "请求UUID"
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        markdown_results:
+          type: array
+          description: "每页的Markdown结果"
+          items:
+            $ref: '#/components/schemas/MarkdownResult'
+        data_info:
+          type: object
+          description: "输入数据信息"
+          properties:
+            width:
+              type: integer
+              example: 2481
+            height:
+              type: integer
+              example: 3508
+            type:
+              type: string
+              example: "image"
+        full_markdown:
+          type: string
+          description: "完整的Markdown文本"
+    MarkdownResult:
+      type: object
+      properties:
+        text:
+          type: string
+          description: "Markdown文本"
+        is_start:
+          type: boolean
+          description: "当前页第一个元素是否为段开始"
+          default: true
+        is_end:
+          type: boolean
+          description: "当前页最后一个元素是否为段结束"
+          default: true

@@ -1,0 +1,150 @@
+"""
+版面解析服务模块（Triton 风格）
+
+调用远程版面解析 API，返回 Markdown 结果。
+"""
+
+import json
+import os
+import requests
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# 从环境变量读取 Layout Parsing API URL
+LAYOUT_PARSING_API_URL = os.getenv("LAYOUT_PARSING_API_URL", "")
+
+
+def call_layout_parsing_api(
+    file: str,
+    api_url: Optional[str] = None,
+    file_type: Optional[int] = None,
+    visualize: bool = False,
+    prettify_markdown: bool = True,
+    use_layout_detection: Optional[bool] = None,
+    use_chart_recognition: Optional[bool] = None,
+    merge_layout_blocks: Optional[bool] = None,
+) -> dict:
+    """
+    调用版面解析 API，返回 Markdown 解析结果。
+
+    Args:
+        file: 服务器可访问的图像文件或PDF文件的URL，或文件内容的Base64编码结果。
+              默认对于超过10页的PDF文件，只有前10页会被处理。
+        api_url: API 服务地址
+        file_type: 文件类型。0 表示 PDF 文件，1 表示图像文件。若不提供则根据 URL 自动推断。
+        visualize: 是否返回可视化结果图
+        prettify_markdown: 是否美化 Markdown 输出
+        use_layout_detection: 是否使用版面检测
+        use_chart_recognition: 是否使用图表识别
+        merge_layout_blocks: 是否合并版面块
+
+    Returns:
+        包含解析结果的字典，结构如下：
+        {
+            "log_id": str,              # 请求 UUID
+            "markdown_results": [       # 每页的 Markdown 结果
+                {
+                    "text": str,        # Markdown 文本
+                    "is_start": bool,   # 当前页第一个元素是否为段开始
+                    "is_end": bool,     # 当前页最后一个元素是否为段结束
+                }
+            ],
+            "data_info": dict,          # 输入数据信息
+        }
+
+    Raises:
+        requests.HTTPError: 请求失败时抛出
+        ValueError: API 返回错误时抛出
+    """
+    # 确定 API URL
+    actual_api_url = api_url or LAYOUT_PARSING_API_URL
+    if not actual_api_url:
+        raise ValueError("Layout Parsing API URL 未配置，请设置环境变量 LAYOUT_PARSING_API_URL 或传入 api_url 参数")
+
+    # 构建内部请求数据
+    inner_data = {
+        "file": file,
+        "visualize": visualize,
+        "prettifyMarkdown": prettify_markdown,
+    }
+    if file_type is not None:
+        inner_data["fileType"] = file_type
+    if use_layout_detection is not None:
+        inner_data["useLayoutDetection"] = use_layout_detection
+    if use_chart_recognition is not None:
+        inner_data["useChartRecognition"] = use_chart_recognition
+    if merge_layout_blocks is not None:
+        inner_data["mergeLayoutBlocks"] = merge_layout_blocks
+
+    # 构建 Triton 格式请求体
+    payload = {
+        "inputs": [
+            {
+                "name": "input",
+                "shape": [1, 1],
+                "datatype": "BYTES",
+                "data": [json.dumps(inner_data)]
+            }
+        ],
+        "outputs": [
+            {"name": "output"}
+        ]
+    }
+
+    logger.info(f"Calling Layout Parsing API: {actual_api_url}")
+
+    # 调用 API
+    response = requests.post(actual_api_url, json=payload, timeout=120)
+    response.raise_for_status()
+
+    # 解析 Triton 格式响应
+    resp_json = response.json()
+    output_data = resp_json["outputs"][0]["data"][0]
+    result = json.loads(output_data)
+
+    # 检查错误
+    if result.get("errorCode", 0) != 0:
+        error_msg = result.get("errorMsg", "Unknown error")
+        logger.error(f"Layout Parsing API Error: {error_msg}")
+        raise ValueError(f"API Error: {error_msg}")
+
+    inner_result = result.get("result", {})
+
+    # 提取 Markdown 结果（过滤掉 images 中的 base64 数据）
+    markdown_results = []
+    for res in inner_result.get("layoutParsingResults", []):
+        markdown = res.get("markdown", {})
+        markdown_results.append({
+            "text": markdown.get("text", ""),
+            "is_start": markdown.get("isStart", True),
+            "is_end": markdown.get("isEnd", True),
+        })
+
+    logger.info(f"Layout Parsing completed, found {len(markdown_results)} pages")
+
+    return {
+        "log_id": result.get("logId", ""),
+        "markdown_results": markdown_results,
+        "data_info": inner_result.get("dataInfo", {}),
+    }
+
+
+def extract_full_markdown(markdown_results: list) -> str:
+    """
+    从版面解析结果中提取完整 Markdown 文本。
+
+    Args:
+        markdown_results: call_layout_parsing_api() 返回的 markdown_results 列表
+
+    Returns:
+        所有页面的 Markdown 内容，以换行符分隔
+    """
+    all_texts = []
+    for page in markdown_results:
+        text = page.get("text", "")
+        if text:
+            all_texts.append(text)
+    return "\n\n".join(all_texts)
+

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.routers import pdf
+from app.routers import pdf, layout_parsing
 import os
 
 # Create necessary directories if they don't exist
@@ -18,6 +18,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Include the PDF processing router
 app.include_router(pdf.router, prefix="/api/v1", tags=["PDF Processing"])
+
+# Include the Layout Parsing router
+app.include_router(layout_parsing.router, prefix="/api/v1", tags=["Layout Parsing"])
 
 @app.get("/", tags=["Root"])
 async def read_root():
