@@ -94,21 +94,39 @@ def call_layout_parsing_api(
     }
 
     logger.info(f"Calling Layout Parsing API: {actual_api_url}")
+    logger.info(f"Request payload - file: {file[:200]}..." if len(file) > 200 else f"Request payload - file: {file}")
+    logger.info(f"Inner data: {json.dumps(inner_data, ensure_ascii=False)}")
+    logger.info(f"Full payload: {json.dumps(payload, ensure_ascii=False)}")
 
     # 调用 API
-    response = requests.post(actual_api_url, json=payload, timeout=120)
-    response.raise_for_status()
+    try:
+        response = requests.post(actual_api_url, json=payload, timeout=120)
+        logger.info(f"API Response status code: {response.status_code}")
+        
+        if response.status_code != 200:
+            logger.error(f"API Response error - status: {response.status_code}, body: {response.text[:500]}")
+        
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed: {e}")
+        raise
 
     # 解析 Triton 格式响应
-    resp_json = response.json()
-    output_data = resp_json["outputs"][0]["data"][0]
-    result = json.loads(output_data)
+    try:
+        resp_json = response.json()
+        output_data = resp_json["outputs"][0]["data"][0]
+        result = json.loads(output_data)
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to parse API response: {e}, response: {response.text[:500]}")
+        raise ValueError(f"API 响应解析失败: {e}")
 
     # 检查错误
     if result.get("errorCode", 0) != 0:
         error_msg = result.get("errorMsg", "Unknown error")
-        logger.error(f"Layout Parsing API Error: {error_msg}")
-        raise ValueError(f"API Error: {error_msg}")
+        error_code = result.get("errorCode")
+        logger.error(f"Layout Parsing API Error - code: {error_code}, msg: {error_msg}")
+        logger.error(f"Full error result: {json.dumps(result, ensure_ascii=False)[:500]}")
+        raise ValueError(f"API Error [{error_code}]: {error_msg}")
 
     inner_result = result.get("result", {})
 

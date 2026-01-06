@@ -9,5 +9,8 @@ services:
       - ./app:/app/app
       - ./uploads:/app/uploads
       - ./static:/app/static
-    container_name: pdf_processing_service
+    environment:
+      # 版面解析 API 地址
+      - LAYOUT_PARSING_API_URL=${LAYOUT_PARSING_API_URL}
+    container_name: ai_agent_support_service
     restart: unless-stopped 

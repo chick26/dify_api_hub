@@ -7,7 +7,8 @@ WORKDIR /app
 # Install Tesseract OCR and other system dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container

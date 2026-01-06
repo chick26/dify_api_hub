@@ -154,9 +154,6 @@ async def layout_parsing_upload_endpoint(
             detail=f"不支持的文件类型: {file.content_type}。支持的类型: {', '.join(allowed_types)}"
         )
 
-    # 根据文件类型设置 file_type
-    file_type = 0 if file.content_type == "application/pdf" else 1
-    
     # 创建唯一文件名
     unique_id = uuid.uuid4()
     original_filename = os.path.splitext(file.filename)[0]
@@ -171,17 +168,25 @@ async def layout_parsing_upload_endpoint(
         
         logger.info(f"File saved to: {saved_path}")
         
+        # 检查文件是否存在
+        if not os.path.exists(saved_path):
+            logger.error(f"File not found after save: {saved_path}")
+            raise ValueError("文件保存失败")
+        
+        file_size = os.path.getsize(saved_path)
+        logger.info(f"File size: {file_size} bytes")
+        
         # 生成可访问的 URL（自动从请求获取 base_url）
         base_url = str(request.base_url)
         file_url = f"{base_url}{STATIC_DIR}/{saved_filename}"
         
         logger.info(f"File URL: {file_url}")
+        logger.info(f"Note: Remote API ({api_url or 'default'}) must be able to access this URL")
         
-        # 调用版面解析 API
+        # 调用版面解析 API（不传 file_type，让 API 自动推断）
         result = call_layout_parsing_api(
             file=file_url,
             api_url=api_url,
-            file_type=file_type,
             visualize=visualize,
             prettify_markdown=prettify_markdown,
             use_layout_detection=use_layout_detection,
