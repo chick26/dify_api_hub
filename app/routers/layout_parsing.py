@@ -6,9 +6,7 @@ from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional
-import os
-import uuid
-import shutil
+import base64
 import logging
 
 from app.services.layout_parsing_service import call_layout_parsing_api, extract_full_markdown
@@ -118,14 +116,11 @@ async def layout_parsing_upload_endpoint(
     use_layout_detection: Optional[bool] = Form(default=None),
     use_chart_recognition: Optional[bool] = Form(default=None),
     merge_layout_blocks: Optional[bool] = Form(default=None),
-    keep_file: bool = Form(default=False),
 ):
     """
     版面解析接口（文件上传方式）
     
-    上传图像或 PDF 文件，保存到服务器后通过 URL 调用版面解析 API。
-    
-    注意：服务需要部署在远程 API 可访问的服务器上（如 http://10.120.78.61:8000）。
+    上传图像或 PDF 文件，转换为 Base64 编码后调用版面解析 API。
     
     Args:
         file: 上传的图像或 PDF 文件
@@ -135,7 +130,6 @@ async def layout_parsing_upload_endpoint(
         use_layout_detection: 是否使用版面检测
         use_chart_recognition: 是否使用图表识别
         merge_layout_blocks: 是否合并版面块
-        keep_file: 是否保留上传的文件（默认处理完后删除）
     """
     # 验证文件类型
     allowed_types = [
@@ -154,38 +148,19 @@ async def layout_parsing_upload_endpoint(
             detail=f"不支持的文件类型: {file.content_type}。支持的类型: {', '.join(allowed_types)}"
         )
 
-    # 创建唯一文件名
-    unique_id = uuid.uuid4()
-    original_filename = os.path.splitext(file.filename)[0]
-    file_ext = os.path.splitext(file.filename)[1]
-    saved_filename = f"{original_filename}_{unique_id}{file_ext}"
-    saved_path = os.path.join(STATIC_DIR, saved_filename)
-    
     try:
-        # 保存文件到 static 目录
-        with open(saved_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        logger.info(f"File saved to: {saved_path}")
-        
-        # 检查文件是否存在
-        if not os.path.exists(saved_path):
-            logger.error(f"File not found after save: {saved_path}")
-            raise ValueError("文件保存失败")
-        
-        file_size = os.path.getsize(saved_path)
+        # 读取文件内容并转换为 Base64
+        file_content = await file.read()
+        file_size = len(file_content)
         logger.info(f"File size: {file_size} bytes")
         
-        # 生成可访问的 URL（自动从请求获取 base_url）
-        base_url = str(request.base_url)
-        file_url = f"{base_url}{STATIC_DIR}/{saved_filename}"
+        # 转换为 Base64
+        file_base64 = base64.b64encode(file_content).decode("utf-8")
+        logger.info(f"Base64 encoded, length: {len(file_base64)}")
         
-        logger.info(f"File URL: {file_url}")
-        logger.info(f"Note: Remote API ({api_url or 'default'}) must be able to access this URL")
-        
-        # 调用版面解析 API（不传 file_type，让 API 自动推断）
+        # 调用版面解析 API（使用 Base64 编码）
         result = call_layout_parsing_api(
-            file=file_url,
+            file=file_base64,
             api_url=api_url,
             visualize=visualize,
             prettify_markdown=prettify_markdown,
@@ -205,10 +180,6 @@ async def layout_parsing_upload_endpoint(
             "full_markdown": full_markdown,
         }
         
-        # 如果保留文件，返回文件 URL
-        if keep_file:
-            response_content["file_url"] = file_url
-        
         return JSONResponse(status_code=200, content=response_content)
         
     except ValueError as e:
@@ -220,10 +191,6 @@ async def layout_parsing_upload_endpoint(
     finally:
         # 关闭文件
         file.file.close()
-        # 如果不保留文件，则删除
-        if not keep_file and os.path.exists(saved_path):
-            os.remove(saved_path)
-            logger.info(f"Cleaned up file: {saved_path}")
 
 
 @router.post("/layout-parsing/markdown-only/")
