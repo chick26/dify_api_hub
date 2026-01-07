@@ -23,9 +23,31 @@ def is_url(s: str) -> bool:
     return bool(re.match(r'^https?://', s, re.IGNORECASE))
 
 
+def extract_local_static_path(url: str) -> Optional[str]:
+    """
+    检测 URL 是否指向本地 static 目录，如果是则返回本地文件路径。
+    
+    Args:
+        url: 文件的 URL 地址
+        
+    Returns:
+        如果是本地 static 文件，返回本地路径；否则返回 None
+    """
+    # 匹配 /static/ 路径
+    match = re.search(r'/static/(.+)$', url)
+    if match:
+        filename = match.group(1)
+        local_path = os.path.join("static", filename)
+        if os.path.exists(local_path):
+            logger.info(f"Detected local static file: {local_path}")
+            return local_path
+    return None
+
+
 def url_to_base64(url: str) -> str:
     """
     下载 URL 对应的文件内容并转换为 Base64 编码。
+    如果 URL 指向本地 static 目录，则直接从文件系统读取。
     
     Args:
         url: 文件的 URL 地址
@@ -36,6 +58,21 @@ def url_to_base64(url: str) -> str:
     Raises:
         ValueError: 下载失败时抛出
     """
+    # 检测是否是本地 static 文件
+    local_path = extract_local_static_path(url)
+    if local_path:
+        try:
+            logger.info(f"Reading local file: {local_path}")
+            with open(local_path, "rb") as f:
+                file_content = f.read()
+            file_base64 = base64.b64encode(file_content).decode("utf-8")
+            logger.info(f"Read local file and encoded to Base64, length: {len(file_base64)}")
+            return file_base64
+        except IOError as e:
+            logger.error(f"Failed to read local file: {local_path}, error: {e}")
+            raise ValueError(f"无法读取本地文件: {e}")
+    
+    # 远程 URL，通过 HTTP 下载
     try:
         logger.info(f"Downloading file from URL: {url}")
         response = requests.get(url, timeout=30)
