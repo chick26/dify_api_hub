@@ -98,9 +98,15 @@ def call_layout_parsing_api(
     logger.info(f"Inner data: {json.dumps(inner_data, ensure_ascii=False)}")
     logger.info(f"Full payload: {json.dumps(payload, ensure_ascii=False)}")
 
-    # 调用 API
+    # 调用 API - 使用手动序列化的方式（更接近 curl 行为）
+    headers = {
+        "Content-Type": "application/json",
+    }
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    logger.info(f"Sending payload (length={len(payload_json)})")
+    
     try:
-        response = requests.post(actual_api_url, json=payload, timeout=120)
+        response = requests.post(actual_api_url, data=payload_json, headers=headers, timeout=120)
         logger.info(f"API Response status code: {response.status_code}")
         
         if response.status_code != 200:
