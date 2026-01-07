@@ -148,20 +148,24 @@ async def layout_parsing_upload_endpoint(
             detail=f"不支持的文件类型: {file.content_type}。支持的类型: {', '.join(allowed_types)}"
         )
 
+    # 根据文件类型设置 file_type: 0=PDF, 1=图像
+    file_type = 0 if file.content_type == "application/pdf" else 1
+
     try:
         # 读取文件内容并转换为 Base64
         file_content = await file.read()
         file_size = len(file_content)
-        logger.info(f"File size: {file_size} bytes")
+        logger.info(f"File size: {file_size} bytes, file_type: {file_type}")
         
         # 转换为 Base64
         file_base64 = base64.b64encode(file_content).decode("utf-8")
         logger.info(f"Base64 encoded, length: {len(file_base64)}")
         
-        # 调用版面解析 API（使用 Base64 编码）
+        # 调用版面解析 API（使用 Base64 编码，传入 file_type）
         result = call_layout_parsing_api(
             file=file_base64,
             api_url=api_url,
+            file_type=file_type,
             visualize=visualize,
             prettify_markdown=prettify_markdown,
             use_layout_detection=use_layout_detection,

@@ -6,6 +6,8 @@
 
 import json
 import os
+import re
+import base64
 import requests
 import logging
 from typing import Optional
@@ -14,6 +16,37 @@ logger = logging.getLogger(__name__)
 
 # 从环境变量读取 Layout Parsing API URL
 LAYOUT_PARSING_API_URL = os.getenv("LAYOUT_PARSING_API_URL", "")
+
+
+def is_url(s: str) -> bool:
+    """判断字符串是否为 URL"""
+    return bool(re.match(r'^https?://', s, re.IGNORECASE))
+
+
+def url_to_base64(url: str) -> str:
+    """
+    下载 URL 对应的文件内容并转换为 Base64 编码。
+    
+    Args:
+        url: 文件的 URL 地址
+        
+    Returns:
+        文件内容的 Base64 编码字符串
+        
+    Raises:
+        ValueError: 下载失败时抛出
+    """
+    try:
+        logger.info(f"Downloading file from URL: {url}")
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        file_content = response.content
+        file_base64 = base64.b64encode(file_content).decode("utf-8")
+        logger.info(f"Downloaded and encoded to Base64, length: {len(file_base64)}")
+        return file_base64
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to download file from URL: {url}, error: {e}")
+        raise ValueError(f"无法从 URL 下载文件: {e}")
 
 
 def call_layout_parsing_api(
@@ -63,9 +96,26 @@ def call_layout_parsing_api(
     if not actual_api_url:
         raise ValueError("Layout Parsing API URL 未配置，请设置环境变量 LAYOUT_PARSING_API_URL 或传入 api_url 参数")
 
+    # 如果 file 是 URL，则下载并转换为 Base64
+    if is_url(file):
+        logger.info("Detected URL input, converting to Base64...")
+        file_base64 = url_to_base64(file)
+        # 如果未指定 file_type，根据 URL 推断
+        if file_type is None:
+            if file.lower().endswith(".pdf"):
+                file_type = 0
+                logger.info("Inferred file_type=0 (PDF) from URL")
+            else:
+                file_type = 1
+                logger.info("Inferred file_type=1 (Image) from URL")
+    else:
+        # 已经是 Base64 编码
+        file_base64 = file
+        logger.info("Input is already Base64 encoded")
+
     # 构建内部请求数据
     inner_data = {
-        "file": file,
+        "file": file_base64,
         "visualize": visualize,
         "prettifyMarkdown": prettify_markdown,
     }
@@ -94,9 +144,8 @@ def call_layout_parsing_api(
     }
 
     logger.info(f"Calling Layout Parsing API: {actual_api_url}")
-    logger.info(f"Request payload - file: {file[:200]}..." if len(file) > 200 else f"Request payload - file: {file}")
-    logger.info(f"Inner data: {json.dumps(inner_data, ensure_ascii=False)}")
-    logger.info(f"Full payload: {json.dumps(payload, ensure_ascii=False)}")
+    logger.info(f"file_type: {file_type}, visualize: {visualize}, prettify_markdown: {prettify_markdown}")
+    logger.info(f"Base64 file length: {len(file_base64)}")
 
     # 调用 API - 使用手动序列化的方式（更接近 curl 行为）
     headers = {
